@@ -1,3 +1,7 @@
+  // inclusion des utilitaires
+  #include <Password.h> 
+  #include <Keypad.h>
+  #include <LiquidCrystal_I2C.h>
 
   // Definition des constantes limites du courant
   const int limite1 = 10;
@@ -20,11 +24,11 @@
   #define BP2 3
   #define BP3 19
 
-  #define ARDRELAY1 8 
-  #define ARDRELAY2 9 
-  #define ARDRELAY3 10
+  #define ARDRELAY1 22 
+  #define ARDRELAY2 23 
+  #define ARDRELAY3 24
 
-  #define BTarret 24 
+  #define BTarret 18 
   #define BTreset 1    
 
   //les valeurs du courant mesurées
@@ -35,6 +39,128 @@
   const int m_calFactor1;
   const int m_calFactor2;
   const int m_calFactor3;
+
+  /*
+  * setup du clavier hexadecimale
+  */
+
+  Password password = Password("4321");
+
+  const byte ROWS = 4; // Four rows
+  const byte COLS = 4; // Four columns
+
+  //definition de la communication
+  //SoftwareSerial MCU2(2, 3)
+
+  #define I2C_ADDR 0x20 //decommenter ceci en cas d'utilisation du PCF8574 (pour la simulation)
+//#define I2C_ADDR    0x27 // decommenter ceci en cas d'utilisation du PCF8574T (pour la réalisation)
+//#define I2C_ADDR    0x3F ////decommenter ceci en cas d'utilisation du PCF8574A (pour la simulation)
+  #define BACKLIGHT_PIN     3
+  #define En_pin  2
+  #define Rw_pin  1
+  #define Rs_pin  0
+  #define D4_pin  4
+  #define D5_pin  5
+  #define D6_pin  6
+  #define D7_pin  7
+
+  LiquidCrystal_I2C  lcd(I2C_ADDR,En_pin,Rw_pin,Rs_pin,D4_pin,D5_pin,D6_pin,D7_pin);
+
+  void envoyerDonneesBluetooth() {
+
+    Serial.print("L1A");
+    Serial.print(courantL1);
+    Serial.print("L1M");
+    Serial.print("10");
+    Serial.print("L1S");
+    Serial.print(ligneL1Active);
+    Serial.print("_");
+    Serial.print("L2A");
+    Serial.print(courantL2);
+    Serial.print("L2M");
+    Serial.print("15");
+    Serial.print("L2S");
+    Serial.print(ligneL2Active);
+    Serial.print("_");
+    Serial.print("L3A");
+    Serial.print(courantL3);
+    Serial.print("L3M");
+    Serial.print("20");
+    Serial.print("L3S");
+    Serial.print(ligneL3Active);
+
+}
+
+void notification(int nl){
+
+}
+
+  // Define the Keymap
+  char keys[ROWS][COLS] = {
+    {'7','8','9','A'},
+    {'4','5','6','B'},
+    {'1','2','3','C'},
+    {'*','0','#','D'}
+  };
+
+  byte rowPins[ROWS] = { 4,5,6,7 };// Connecter le keypad ROW0, ROW1, ROW2 and ROW3 aux broches arduino
+  byte colPins[COLS] = { 10,11,12,13 };// Connecter le keypad COL0, COL1 and COL2 to these Arduino pins.
+
+  Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
+
+  void keypadEvent(KeypadEvent eKey){
+
+    switch (keypad.getState()){
+      case PRESSED:
+        // lcd.clear();//EFFACER CETTE LIGNE SI ON VEUT AFFICHER TOUTES LES TOUCHES PRESSEES
+        // lcd.print("*");
+        switch (eKey){
+          case '#': checkPassword(); 
+          break;
+          case '*': reinitializePassword(); 
+          break;
+          default: 
+            password.append(eKey);
+            lcd.setCursor(1, 2);
+            lcd.print(password.getGues());
+        }
+    }
+  }
+
+  void checkPassword(){
+
+    if (password.evaluate()){
+      lcd.setCursor(1, 2);
+      lcd.print("correct ");
+      activerLigne(1);
+      activerLigne(2);
+      activerLigne(3);
+      // lcd.clear();
+      password.reset(); //reinitialiser le mot de passe après entrée correct
+      // delay(500);
+      // lcd.clear();
+          
+    }else{
+      lcd.setCursor(1, 2);
+      lcd.print("incorrect");
+      password.reset(); //reinitialisation du mot de passe après mot de passe incorrecte
+      delay(500);
+      lcd.setCursor(1, 2);
+      lcd.print("Reesayer");
+    }
+  }
+
+  void reinitializePassword(){
+    lcd.setCursor(1, 2);
+    lcd.print("Reinitialisation ...");
+    password.reset(); //reinitialisation du mot de passe 
+    delay(500);
+    lcd.setCursor(1, 2);
+    password.reset();
+    lcd.print("entre le code ");
+  }
+
+
 
   float getCurrent(int CAPTEUR){
       float adcValue = analogRead(CAPTEUR);
@@ -62,7 +188,7 @@
     }
   }
 
-  void desactiverLigne(int numeroLigne) {
+  void desactiverLigne(int numeroLigne){
     if (numeroLigne == 1) {
       digitalWrite(ARDRELAY1, LOW);
       ligneL1Active = false;
@@ -76,48 +202,37 @@
   }
 
   void buttonEnfoncer1(){
-    Serial.println("Bouton ligne 1");
     ation(1, BP1, ligneL1Active, ligneL1blocked);
   }
   void buttonEnfoncer2(){
-    Serial.println("Bouton ligne 2");
     ation(2, BP2, ligneL2Active, ligneL2blocked);
   }
   void buttonEnfoncer3(){
-    Serial.println("Bouton ligne 3");
     ation(3, BP3, ligneL3Active, ligneL3blocked);
   }
 
   void ation(int nl, int pinbt, bool ligneactive, bool ligneblock){
     if (digitalRead(pinbt) == LOW){
-      String complete = String(nl) + " ...";
-      String message = "Ligne" + complete;
-      Serial.println(message);
 
       int n = 0;
       while(digitalRead(pinbt) == LOW){
           n ++;
-          Serial.print("le nombre n : ");
-          Serial.println(n);
           delay(1000);
-      }
-      if(n > 15){
-        desactiverLigne(nl);
-        Serial.print("linge ");
-        Serial.print(nl);
-        Serial.println(" En arret");
-
-      }else{
-        Serial.println("pret pour");
-        if(ligneblock){
-          Serial.println("Entrez le code");
-        }else if(!ligneactive){
-          activerLigne(nl);
-          complete = String(nl) + " Active";
-          message = "Ligne" + complete;
-          Serial.print(message);
+        if(n > 20){
+          desactiverLigne(nl);
         }
       }
+      
+      if (n < 20){
+        if(ligneblock){
+          lcd.setCursor(1, 2);
+          lcd.print("Entrez le code");
+        }else if(!ligneactive){
+          activerLigne(nl);
+        }
+      }
+      
+    
     }
   }
 
@@ -128,7 +243,6 @@
       desactiverLigne(1);
       desactiverLigne(2);
       desactiverLigne(3);
-      Serial.println("Arret Urgence");
       ligneL1Active = false;
       ligneL2Active = false;
       ligneL3Active = false;
@@ -158,37 +272,53 @@
 
     attachInterrupt(digitalPinToInterrupt(BTarret), arretUrgence, FALLING);
 
+    keypad.addEventListener(keypadEvent);
+
+    lcd.begin(20,4);
+    lcd.clear();
+    lcd.setCursor(1, 0);
+    lcd.print("Demarrage ...");
+
+
   }
 
   void loop(){
 
-    Serial.println("Debut");
     lireCourant();
 
-    Serial.print(courantL1);
-    Serial.println(" A");
+    lcd.clear();
+    lcd.setCursor(0, 0);  
 
-    Serial.print(courantL2);
-    Serial.println(" A");
+    lcd.print(courantL1);
 
-    Serial.print(courantL3);
-    Serial.println(" A");
+    lcd.setCursor(8, 0);  
+    lcd.print(courantL2);
+
+    lcd.setCursor(16, 0);
+    lcd.print(courantL3);
 
     if (courantL1 > limite1) {
       desactiverLigne(1);
       ligneL1blocked = true;
+      notification(1);
     }
     
     if (courantL2 > limite2) {
       desactiverLigne(2);
       ligneL2blocked = true;
+      notification(1);
     }
     
     if (courantL3 > limite3) {
       desactiverLigne(3);
       ligneL3blocked = true;
+      notification(1);
     }
+
+    Serial.println();
+    envoyerDonneesBluetooth();
     
-    delay(1000);
+    keypad.getKey();
+    delay(500);
 
   }
